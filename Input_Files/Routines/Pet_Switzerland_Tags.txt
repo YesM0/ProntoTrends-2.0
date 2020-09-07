@@ -1,0 +1,15 @@
+name: Pet
+tags_included:  # choose either of Tag ID or Tag Name
+    - Hund erziehen
+    - Hunde betreuen
+    - Dog sitter
+    - Dieta animali
+    - Veterinario
+    - Cat sitter
+    - Addestramento cani
+group_by_tag_name: True
+min_date: '2018-01-01'
+tag_merges: 
+    Addestramento cani:
+        - Addestramento cani
+        - Addestratore

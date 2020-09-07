@@ -1,0 +1,12 @@
+name: Pet
+tags_included:  # choose either of Tag ID or Tag Name
+    - Hund erziehen
+    - Hunde betreuen
+    - Hunde pflegen
+group_by_tag_name: True
+min_date: '2018-01-01'
+tag_categories:
+    All_Pet:
+        - Hund erziehen
+        - Hunde betreuen
+        - Hunde pflegen

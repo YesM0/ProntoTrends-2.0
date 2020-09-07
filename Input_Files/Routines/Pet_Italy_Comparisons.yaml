@@ -1,0 +1,24 @@
+name: Pet
+tags_included:
+    - Addestratore
+    - Servizi di lavaggio e toelettatura
+    - Dog sitter
+    - Dieta animali
+    - Veterinario
+    - Cat sitter
+    - Addestramento cani
+group_by_tag_name: True
+min_date: '2018-01-01'
+tag_categories:
+    All_Pet:
+        - Addestratore
+        - Servizi di lavaggio e toelettatura
+        - Dog sitter
+        - Dieta animali
+        - Veterinario
+        - Cat sitter
+        - Addestramento cani
+tag_merges: 
+    Addestramento cani:
+        - Addestramento cani
+        - Addestratore
