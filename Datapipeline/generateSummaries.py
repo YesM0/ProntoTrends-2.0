@@ -1,21 +1,20 @@
-import os
-import sys
-
 if __name__ == '__main__':
-    sys.path.extend(['../', './'])
+    import sys
+
+    sys.path.append('../')
+
+import os
+from typing import Union, Dict, Callable
 
 import pandas as pd
 from tqdm import tqdm as progressbar
-import os
-from typing import Union, Dict, List
-from utils.Countries import get_region_id_to_name_dict, generateRegionIds
-from Data_Inspectors.inspector import getAvailableTags, getFile
 
-from utils.misc_utils import getDirectory, saveData, reverseDict, lcol
-from utils.user_interaction_utils import binaryResponse, choose_from_dict
-from utils.custom_types import *
-from Datapipeline.mainProxy import getChosenCountries
+from Data_Inspectors.inspector import getAvailableTags, getFile
+from utils.Countries import get_region_id_to_name_dict, generateRegionIds, getChosenCountries
 from utils.Filesys import generic_FileServer
+from utils.custom_types import *
+from utils.misc_utils import getDirectory, reverseDict, lcol, save_csv
+from utils.user_interaction_utils import binaryResponse, choose_from_dict
 
 FS = generic_FileServer
 
@@ -24,7 +23,7 @@ def readMergeInfo(country_short_code, prefix=""):
     country_short_code = country_short_code.upper()
     if len(prefix) > 0:
         prefix = prefix + "_"
-    csv = pd.read_csv(os.path.join(FS.Inputs, f"{prefix}Tag_Keyword_{country_short_code}.csv"))
+    csv = pd.read_csv(os.path.join(FS.Inputs, f"{prefix}Tag_Keyword_{country_short_code}.csv"), encoding = 'latin1')
     csv.rename(axis='columns', mapper={'tag': 'tag_name'}, inplace=True)
     return csv
 
@@ -59,10 +58,13 @@ def readFile(filepath, dimension):
 
 
 def remap(value, maximum):
-    if pd.isna(value) or pd.isna(maximum) or isinstance(maximum, str) or isinstance(value,str) or maximum==0:
+    if pd.isna(value) or pd.isna(maximum) or isinstance(maximum, str):
         return 0
     else:
-        v = round((value / maximum) * 100)
+        if maximum != 0:
+            v = round((value / maximum) * 100)
+        else:
+            v = 0
     return v
 
 
@@ -168,7 +170,7 @@ def buildJobs(mergeInfo, country, is_other_folder=False, only_country_level=Fals
     return all_jobs
 
 
-def execute_and_save(country: str, all_jobs: list, adjusted_directory=None):
+def execute_and_save(country: str, all_jobs: list, adjusted_directory=None, logging_func: Callable = print):
     directory = getDirectory(["Output_Files", 'Aggregated', country]) if not adjusted_directory else getDirectory(
         adjusted_directory)
     count_saved = 0
@@ -177,13 +179,13 @@ def execute_and_save(country: str, all_jobs: list, adjusted_directory=None):
         result = job.aggregate()
         if result is not None:
             file_path = os.path.join(directory, f"{job.region_code}_{job.tag_id}_{job.tag_name}_{job.dimension}.csv")
-            saveData(data=result, name=file_path)
-            print(f"Saved file: {file_path}")
+            save_csv(result, file_path, logging_func=logging_func)
+            logging_func(f"Saved file: {file_path}")
             count_saved += 1
         else:
-            print(f"No Output for job: {job}")
+            logging_func(f"No Output for job: {job}")
             count_failes += 1
-    print(f"{lcol.WARNING}Saved {count_saved} files. Failed: {count_failes}{lcol.ENDC}")
+    logging_func(f"{lcol.WARNING}Saved {count_saved} files. Failed: {count_failes}{lcol.ENDC}")
 
 
 def read_in_scaling_factor(country_name: Country_Fullname, county_shortcode: Country_Shortcode, tag_id: Union[str, int] = None, tag_name: str = None):
@@ -195,7 +197,7 @@ def read_in_scaling_factor(country_name: Country_Fullname, county_shortcode: Cou
         # if i % 10 == 0:
         #     print(f'Checking file {i + 1} of {len(poss_files)}\n{filename}')
         components = filename.split("_")
-        if components[0] == county_shortcode.upper() and components[3] == "Geo.csv" and (components[1] == tag_id or components[2] == tag_name):
+        if len(components) >= 4 and components[0] == county_shortcode.upper() and components[3] == "Geo.csv" and (components[1] == tag_id or components[2] == tag_name):
             # print("Found file")
             filepath = os.path.join(expected_file_location, filename)
             break
@@ -208,29 +210,28 @@ def read_in_scaling_factor(country_name: Country_Fullname, county_shortcode: Cou
         return obj['means']
 
 
-def correct_values(country_name: Country_Fullname, short_code: Country_Shortcode):
+def correct_values(country_name: Country_Fullname, short_code: Country_Shortcode, logging_func: Callable = print):
     all_tags: Dict[Union[str, int], str] = getAvailableTags(country_name, short_code, 'Geo')
     for i, (tag_name, tag_id) in enumerate(all_tags.items()):
-        print(f"Working on tag {tag_name} ({i + 1}/{len(all_tags)})")
+        logging_func(f"Working on tag {tag_name} ({i + 1}/{len(all_tags)})")
         scaling_factors = read_in_scaling_factor(country_name, short_code, tag_id=tag_id, tag_name=tag_name)
         corrected_count = 0
         for region_id in scaling_factors:
             if pd.isna(region_id):
                 continue
-            print(f"Trying to find the file for {region_id}")
+            logging_func(f"Trying to find the file for {region_id}")
             file = getFile(country_name, tag_name, 'Time', region_id)
             if file:
-                print(f"Adjusting the file for region {region_id}")
+                logging_func(f"Adjusting the file for region {region_id}")
                 df = pd.read_csv(file)
                 df['means'] = df['means'].apply(lambda x: x * (scaling_factors[region_id] / 100))
                 df.to_csv(os.path.join(FS.Aggregated, country_name,
                                        f"{region_id}_{tag_id}_{tag_name}_Time_Adjusted.csv"))
-                print(f"{lcol.OKGREEN}Saved file{lcol.ENDC}")
+                logging_func(f"{lcol.OKGREEN}Saved file{lcol.ENDC}")
                 corrected_count += 1
             else:
                 continue
-        print(f"{lcol.OKBLUE}Adjusted {corrected_count} files for {tag_name} {lcol.ENDC}")
-        # TODO: Show summary of all adjustments at the end
+        logging_func(f"{lcol.OKBLUE}Adjusted {corrected_count} files for {tag_name} {lcol.ENDC}")
     return
 
 
